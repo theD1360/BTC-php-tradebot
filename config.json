@@ -1,0 +1,20 @@
+{
+	"mtgox":{
+		"key" : "your mtgox key",
+		"secret" : "your mtgox secret",
+		"certFile" : "mtgox-cert"	
+	},
+	"throttling":{
+		"low" : 0,
+		"high" : 30,
+		"interval" : 1
+	},
+	"wait" : 1,
+	"trade" : {
+		"balanceMinimum" : {
+			"BTC" : 0.5,
+			"USD" : 0.5
+		}
+	}
+
+}
