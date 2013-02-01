@@ -56,12 +56,16 @@ System_Daemon::log(
 // still run.
 $config = json_decode(file_get_contents("config.json"), true);
 $ledger = new Ledger();
-$firstRun = true;
 $min = ( is_int( $config['wait'] ) ) ? $config['wait'] : 1;
 $minWait = ( is_int( $config['throttling']['low'] ) ) ? $config['throttling']['low'] : $min;
 $maxWait = ( is_int( $config['throttling']['high'] ) ) ? $config['throttling']['high'] : 30;
 $tradeBalanceMinBTC = ( is_numeric( $config['trade']['balanceMinimum']['BTC'] ) ) ? $config['trade']['balanceMinimum']['BTC'] : 1;
 $tradeBalanceMinUSD = ( is_numeric( $config['trade']['balanceMinimum']['USD'] ) ) ? $config['trade']['balanceMinimum']['USD'] : 1;
+$randomness = false;
+$firstRun = $ledger->isFirstRun();
+
+if($firstRun)
+	echo "Detected a possible first run scenario. No ledger settings loaded \n";
 
 while(!System_Daemon::isDying()){
 	
@@ -87,7 +91,7 @@ while(!System_Daemon::isDying()){
 	try {
 		# Check and log orders into the ledger
 		$orders = $mtGox->getOrders();
-		$syncRes = $ledger->syncOrders($orders);
+		$syncRes = $ledger->syncOrders($orders, $firstRun);
 		
 		# Get my data
 		$info = $mtGox->getInfo();
@@ -100,13 +104,12 @@ while(!System_Daemon::isDying()){
 		
 		# Get ticker data
 		$ticker = $mtGox->getTicker();
-
-		# simulate a first run scenario to readjust orders.
+/*
 		if(($syncRes === 0 || ($min % $maxWait)==0) &&  $btc==0){
 			$ledger->resetPrice();
 			$firstRun=true;	
 		}
-
+*/
 		if($firstRun===true){
 			$firstRun = false;
 			$avg = ($ticker['buy']['value']+$ticker['sell']['value'])/2;
@@ -135,15 +138,15 @@ while(!System_Daemon::isDying()){
 
 
 		if($btcAvailable>=$tradeBalanceMinBTC){
-			
+			$rand = rand(1, 2);
 			// Begin Drafting a trade
-			$btcAvailable = $btcAvailable/rand(1,2);
-			$price = $ledger->feeAdjust("ask", $fee);
+			$btcAvailable = $btcAvailable/$rand;
+			$price = $ledger->feeAdjust("ask", $fee, $randomness);
 
 					
 			System_Daemon::log(
 				System_Daemon::LOG_INFO, 
-				"drafting (ask: {$price}, amount: $btcAvailable)"
+				"drafting (ask: {$price}, amount: $btcAvailable BTC)"
 			);
 
 			// if our drafted trade is profitable then push a trade
@@ -154,7 +157,7 @@ while(!System_Daemon::isDying()){
 				$adj = ($ledger->avgPrice('bid')/$price);
 
 				# Log this price in the ledger
-				$ledger->addPrice(time() ,$price, $btcAvailabe, 'ask');
+				$ledger->addPrice(time() ,$price, $btcAvailable, 'ask');
 				$orders = $mtGox->placeOrder("ask", $btcAvailable, $price);
 				
 				$ledger->reset();			
@@ -168,13 +171,15 @@ while(!System_Daemon::isDying()){
 		}
 		
 		if($usdAvailable>=$tradeBalanceMinUSD){
-			
+			$rand = rand(1, 2);			
 			// Begin drafting a trade		
-			$price = $ledger->feeAdjust("bid", $fee);
+			$price = $ledger->feeAdjust("bid", $fee, $randomness);
+
+			$usdAvailable = ($usdAvailable/$rand);
 
 			System_Daemon::log(
 				System_Daemon::LOG_INFO, 
-				"drafting (bid: {$price}, amount: $usdAvailable)"
+				"drafting (bid: {$price}, amount: $usdAvailable USD"
 			);
 
 			// If our our drafted trade is profitable push a trade
@@ -183,7 +188,7 @@ while(!System_Daemon::isDying()){
 				$price = $ticker['sell']['value'];
                       		$adj = ($price/$ledger->avgPrice('ask'));
 				
-				$usdAvailable = ($usdAvailable/rand(1,2))/$price;
+				$usdAvailable = $usdAvailable/$price;
 				$ledger->addPrice(time(), $price, $usdAvailable,"bid");
 					
 				$orders = $mtGox->placeOrder("bid", $usdAvailable, $price);
@@ -215,7 +220,7 @@ while(!System_Daemon::isDying()){
 	# Take a nap for a specified offset 
 	sleep(60*$min);
 }
-
+$ledger->save();
 System_Daemon::stop();
 
 ?>
