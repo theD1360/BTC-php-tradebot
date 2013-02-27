@@ -101,23 +101,17 @@ while(!System_Daemon::isDying()){
 		$fee = $info['Trade_Fee'];
 		
 		$balanceChanged = $ledger->updateBalance($btc, $usd);
-		
+
+		$ledger->updateFee($fee);	
+
 		# Get ticker data
 		$ticker = $mtGox->getTicker();
-/*
-		if(($syncRes === 0 || ($min % $maxWait)==0) &&  $btc==0){
-			$ledger->resetPrice();
-			$firstRun=true;	
-		}
-*/
+
+		$ledger->updateTicker($ticker['buy']['value'], $ticker['sell']['value']);
+
 		if($firstRun===true){
 			$firstRun = false;
-			$avg = ($ticker['buy']['value']+$ticker['sell']['value'])/2;
-			$startSellPrice = ($avg+($avg*($fee/100)));
-			$startBuyPrice = ($avg-($avg*($fee/100)));
-
-			$ledger->addPrice(time(), $startBuyPrice, 1, "bid");
-			$ledger->addPrice(time(), $startSellPrice, 1, "ask");
+			$ledger->resetPrice();
 			System_Daemon::log(
 				System_Daemon::LOG_INFO, 
 				"adjusting avgs: ask: {$ledger->avgPrice('ask')}, buy: {$ledger->avgPrice('bid')}"
@@ -132,16 +126,16 @@ while(!System_Daemon::isDying()){
 		// anounce ticker info		
 		System_Daemon::log(
 			System_Daemon::LOG_INFO, 
-			"ticker (ask: {$ticker['sell']['value']}, buy: {$ticker['buy']['value']})"
+			"ticker (ask: {$ticker['sell']['value']}, buy: {$ticker['buy']['value']}, fee: {$fee})"
 		);
 
 
 
-		if($btcAvailable>=$tradeBalanceMinBTC){
-			$rand = rand(1, 2);
+		if($btcAvailable>$tradeBalanceMinBTC){
+			$rand = rand(1, 3);
 			// Begin Drafting a trade
 			$btcAvailable = $btcAvailable/$rand;
-			$price = $ledger->feeAdjust("ask", $fee, $randomness);
+			$price = $ledger->feeAdjust("ask", $randomness);
 
 					
 			System_Daemon::log(
@@ -149,12 +143,13 @@ while(!System_Daemon::isDying()){
 				"drafting (ask: {$price}, amount: $btcAvailable BTC)"
 			);
 
+			$bestPrice = ($ticker['sell']['value'] > $ticker['buy']['value'])?$ticker['sell']['value']:$ticker['buy']['value'];
 			// if our drafted trade is profitable then push a trade
-			if($ticker['buy']['value']>$price){		
+			if($bestPrice>$price){		
 				$min = $minWait;								
-				$price = $ticker['buy']['value'];
+				$price = $bestPrice;
 
-				$adj = ($ledger->avgPrice('bid')/$price);
+				$adj = (1 - ($ledger->avgPrice('bid')/$price)) * 100;
 
 				# Log this price in the ledger
 				$ledger->addPrice(time() ,$price, $btcAvailable, 'ask');
@@ -170,23 +165,23 @@ while(!System_Daemon::isDying()){
 			
 		}
 		
-		if($usdAvailable>=$tradeBalanceMinUSD){
-			$rand = rand(1, 2);			
+		if($usdAvailable>$tradeBalanceMinUSD){
+			$rand = rand(1, 3);			
 			// Begin drafting a trade		
-			$price = $ledger->feeAdjust("bid", $fee, $randomness);
+			$price = $ledger->feeAdjust("bid", $randomness);
 
 			$usdAvailable = ($usdAvailable/$rand);
 
 			System_Daemon::log(
 				System_Daemon::LOG_INFO, 
-				"drafting (bid: {$price}, amount: $usdAvailable USD"
+				"drafting (bid: {$price}, amount: $usdAvailable USD)"
 			);
-
+			$bestPrice = ($ticker['sell']['value'] < $ticker['buy']['value'])?$ticker['sell']['value']:$ticker['buy']['value'];
 			// If our our drafted trade is profitable push a trade
-			if($ticker['sell']['value']<$price){
+			if($bestPrice<$price){
 				$min = $minWait;		
-				$price = $ticker['sell']['value'];
-                      		$adj = ($price/$ledger->avgPrice('ask'));
+				$price = $bestPrice;
+                      		$adj = (1-($price/$ledger->avgPrice('ask'))) * 100;
 				
 				$usdAvailable = $usdAvailable/$price;
 				$ledger->addPrice(time(), $price, $usdAvailable,"bid");

@@ -9,15 +9,21 @@
 class Ledger {
 				private $saveFile = "./.ledgerDump",
 					$balances = array(),
+					$lastTrade = 0,
+					$fee = 0.60,
+					$percentChange = 0,
 					$btc = array(0),
 					$usd = array(0),
+					$avgs = array(),
 					$price = array("ask"=>array(), "bid"=>array()),
 					$orders = array("clearme"=>"firstRun"),
+					$ticker = array("ask"=>array(), "bid"=>array()),
 					$balanceLog = array(),
 					$firstRun = true;
 
 					function __construct(){
 						$this->load();
+						$this->lastTrade = (!$this->lastTrade)?time():$this->lastTrade;
 					}
 
 					public function addUSD($amount){
@@ -57,35 +63,41 @@ class Ledger {
 							}
 						}
 					}
+					public function updateAvgPrices(){
+						$types = array("ask", "bid");
+						$this->avgs = array();
+						foreach($types as $type){
+
+							$total = 0;
+							$count = 0;
 						
-					public function avgPrice($type){
-						#$p = array_sum($this->price[$type])/count($this->price[$type]);
+							foreach($this->price[$type] as $item){
+								$total += $item['price'] * $item['amount'];
+								$count += $item['amount'];
+							}
 						
-						$total = 0;
-						$count = 0;
-						
-						foreach($this->price[$type] as $item){
-							$total += $item['price'] * $item['amount'];
-							$count += $item['amount'];
+							if($count)
+								$p = $total/$count;
+							else
+								$p = $this->feeAdjust($type);	
+
+							$this->avgs[$type] = $p;
+							
 						}
 						
-						$p = $total/$count;
-						
-						if(empty($p))
-							throw new Exception("Avg price is empty!");
-						#var_dump($this->price);
-						#echo "avg price call for $type is ".$p;
-						return $p;
+						$this->percentChange = $this->avgs['bid']/$this->avgs['ask'];
+					}	
+
+					public function avgPrice($type){
+						return $this->avgs[$type];
 					}
 
 					/* This should be called logTrade */
 					public function addPrice($date, $price, $amount, $type){
-						if(count($this->price[$type])>20){
-							krsort($this->price[$type]);
-							array_pop($this->price[$type]);
-						}
 						# Store values to get weighted avg later
 						 $this->price[$type][$date] = array( 'price'=>$price, 'amount'=>$amount);
+						$this->updateAvgPrices();						
+						$this->lastTrade = time();
 					}
 					
 					public function syncOrders($orders, $logTrade = false){
@@ -108,11 +120,19 @@ class Ledger {
 						}	
 						$count = count($this->orders);
 						
-						# If there are no orders open reset the price to avoid restarting daemon
 						$this->save();	
 						return $count;
 					}
-					
+				
+					public function updateFee($fee){
+						$this->fee = $fee;
+					}
+
+					public function updateTicker($buy, $sell){
+						$this->ticker['bid'] = $buy;
+						$this->ticker['ask'] = $sell;
+					}
+	
 					public function updateBalance($btc, $usd){
 					
 						$changed = false;
@@ -122,11 +142,13 @@ class Ledger {
 							$this->balances = $newBalance;
 							if($btc==0 || $usd==0){
 								array_unshift($this->balanceLog, $newBalance);
-								/* Resetting price to speed up trading */
-								if($btc == 0 && count($this->orders)==0)
-									$this->resetPrice();
 							}
 						}	
+
+						/* Adjust price to speed up trading */
+						if( $btc == 0 && count($this->orders)==0 && ((time() - $this->lastTrade)>60*60*24*1 || $changed == true)){
+							$this->resetPrice();
+						}
 						$this->save();				
 						return $changed;
 					}
@@ -138,7 +160,15 @@ class Ledger {
 					}
 					
 					public function resetPrice(){
+						
+						if(empty($this->ticker['ask']) || empty($this->ticker['bid']))
+							throw new Exception("Ticker must be set before reseting price");
+
 						$this->price = array("ask"=>array(), "bid"=>array());
+						$this->avgs = array();
+						$this->percentChange = 0;
+						$this->addPrice(time(), $this->ticker['ask'], 0.0000001, "ask");
+
 					}
 
 					public function btcOrderTotal(){
@@ -157,20 +187,31 @@ class Ledger {
 						return sprintf("%.5F", ($this->balances["usd"] - $this->usdOrderTotal()));
 					}
 	
-					public function feeAdjust($type, $fee=0.6, $random = false){
+					public function feeAdjust($type, $random = false){
+						
 						if(empty($type))
 							throw new Exception("transaction type cannot be left blank in feeAdjust()");
+
 						$type = strtolower("$type");
 						if(!in_array($type, array("bid","ask")))
 							throw new Exception("transaction type expects string 'bid' or 'ask' only in feeAdjust()");
+						$fee = ($this->fee>=$this->percentChange)?$this->fee:$this->percentChange;
 
 						// Ask for the avg price of the opposite type
-						$avg = $this->avgPrice(($type=="bid")?"ask":"bid");
-						$max = 1000-($fee*1000);	
+						$avg = $this->avgs[($type=="bid")?"ask":"bid"];
+						$max = 10000-($fee*10000);	
 
+						// Always ask for just a tiny bit more than the fee
+						$adjust = 1;
+
+						// If random is set throw a random adjustment
 						if($random)
-							$fee = $fee + ((double) (rand(1,$max)/1000));
+							$adjust = rand(1,$max);
+
+						$fee = $fee + ((double) ($adjust/10000));
 					
+						//$fee = $fee * 2;
+
 						if($type == "bid")
 							$price = ($avg-($avg*($fee/100)));
 					
