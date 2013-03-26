@@ -51,21 +51,33 @@ System_Daemon::log(
 	System_Daemon::getOption("logLocation")
 );
 
-// Your normal PHP code goes here. Only the code will run in the background
-// so you can close your terminal session, and the application will
-// still run.
+
 $config = json_decode(file_get_contents("config.json"), true);
-$ledger = new Ledger();
+
 $min = ( is_int( $config['wait'] ) ) ? $config['wait'] : 1;
 $minWait = ( is_int( $config['throttling']['low'] ) ) ? $config['throttling']['low'] : $min;
 $maxWait = ( is_int( $config['throttling']['high'] ) ) ? $config['throttling']['high'] : 30;
 $tradeBalanceMinBTC = ( is_numeric( $config['trade']['balanceMinimum']['BTC'] ) ) ? $config['trade']['balanceMinimum']['BTC'] : 1;
 $tradeBalanceMinUSD = ( is_numeric( $config['trade']['balanceMinimum']['USD'] ) ) ? $config['trade']['balanceMinimum']['USD'] : 1;
 $randomness = false;
-$firstRun = $ledger->isFirstRun();
 
-if($firstRun)
-	echo "Detected a possible first run scenario. No ledger settings loaded \n";
+try {
+	# create mtGox object
+	$tradeBot = new trader( $config['mtgox']['key'],$config['mtgox']['secret'], $config['mtgox']['certFile']);
+}catch( Exception $e){
+	echo $e->getMessage();
+	exit;
+}
+
+
+
+if($tradeBot->isFirstRun)
+	System_Daemon::log(
+		System_Daemon::LOG_INFO, 
+		"Detected a first run scenario. No save file loaded..."
+	);
+
+
 
 while(!System_Daemon::isDying()){
 	
@@ -78,64 +90,38 @@ while(!System_Daemon::isDying()){
 			$min = $minWait;
 	}
 	
-	try {
-	
-		# create mtGox object
-		$mtGox = new mtGox( $config['mtgox']['key'],$config['mtgox']['secret'], $config['mtgox']['certFile']);
-
-	}catch( Exception $e){
-		echo $e->getMessage();
-		exit;
-	}
 
 	try {
-		# Check and log orders into the ledger
-		$orders = $mtGox->getOrders();
-		$syncRes = $ledger->syncOrders($orders, $firstRun);
+		# Check and log orders into the tradeBot
+		$syncRes = $tradeBot->syncOrders($firstRun);
 		
 		# Get my data
-		$info = $mtGox->getInfo();
+		$info = $tradeBot->updateInfo();
 		
-		$btc = $info['Wallets']["BTC"]["Balance"]["value"];
-		$usd = $info['Wallets']["USD"]["Balance"]["value"];	
-		$fee = $info['Trade_Fee'];
-		
-		$balanceChanged = $ledger->updateBalance($btc, $usd);
-
-		$ledger->updateFee($fee);	
 
 		# Get ticker data
-		$ticker = $mtGox->getTicker();
-
-		$ledger->updateTicker($ticker['buy']['value'], $ticker['sell']['value']);
-
-		if($firstRun===true){
-			$firstRun = false;
-			$ledger->resetPrice();
-			System_Daemon::log(
-				System_Daemon::LOG_INFO, 
-				"adjusting avgs: ask: {$ledger->avgPrice('ask')}, buy: {$ledger->avgPrice('bid')}"
-			);
-		}
+		$ticker = $tradeBot->updateTicker();
 
 
-		$btcAvailable = $ledger->btcAvailable();
-		$usdAvailable = $ledger->usdAvailable();
+		$btcAvailable = $tradeBot->btcAvailable();
+		$usdAvailable = $tradeBot->usdAvailable();
 
-
+		$percentChange = $tradeBot->getPercentChange();
+		
 		// anounce ticker info		
 		System_Daemon::log(
 			System_Daemon::LOG_INFO, 
-			"ticker (ask: {$ticker['sell']['value']}, buy: {$ticker['buy']['value']}, fee: {$fee})"
+			"ticker (ask: {$ticker['sell']['value']}, buy: {$ticker['buy']['value']}, current percent change: {$percentChange})"
 		);
 
 
 
+		$rand = rand(1, 10);
+		// Begin Drafting a trade
+		$btcAvailable = $btcAvailable/$rand;
+		$price = $tradeBot->feeAdjust("ask", $randomness);
+
 		if($btcAvailable>$tradeBalanceMinBTC){
-			$rand = rand(1, 3);
-			// Begin Drafting a trade
-			$btcAvailable = $btcAvailable/$rand;
-			$price = $ledger->feeAdjust("ask", $randomness);
 
 					
 			System_Daemon::log(
@@ -144,33 +130,34 @@ while(!System_Daemon::isDying()){
 			);
 
 			$bestPrice = ($ticker['sell']['value'] > $ticker['buy']['value'])?$ticker['sell']['value']:$ticker['buy']['value'];
+
+			$shortSell = ($bestPrice/$price)*100;
 			// if our drafted trade is profitable then push a trade
-			if($bestPrice>$price){		
+			//if($bestPrice>$price || ($usdAvailable <= $tradeBalanceMinUSD && $shortSell <= 95)){
+			
+			if($bestPrice>$price){
 				$min = $minWait;								
 				$price = $bestPrice;
 
-				$adj = (1 - ($ledger->avgPrice('bid')/$price)) * 100;
 
-				# Log this price in the ledger
-				$ledger->addPrice(time() ,$price, $btcAvailable, 'ask');
-				$orders = $mtGox->placeOrder("ask", $btcAvailable, $price);
+				# Log this price in the tradeBot
+				$orders = $tradeBot->sellBTC($btcAvailable, $price);
 				
-				$ledger->reset();			
 
 				System_Daemon::log(
 					System_Daemon::LOG_INFO, 
-					"Placing order: (amount: $btcAvailable, ask: $price, adjustment: $adj)"
+					"Placing order: (amount: $btcAvailable, ask: $price)"
 				);
 			}
 			
 		}
 		
-		if($usdAvailable>$tradeBalanceMinUSD){
-			$rand = rand(1, 3);			
-			// Begin drafting a trade		
-			$price = $ledger->feeAdjust("bid", $randomness);
+		$rand = rand(1, 10);			
+		// Begin drafting a trade		
+		$price = $tradeBot->feeAdjust("bid", $randomness);
+		$usdAvailable = ($usdAvailable/$rand);
 
-			$usdAvailable = ($usdAvailable/$rand);
+		if($usdAvailable>$tradeBalanceMinUSD){
 
 			System_Daemon::log(
 				System_Daemon::LOG_INFO, 
@@ -181,22 +168,18 @@ while(!System_Daemon::isDying()){
 			if($bestPrice<$price){
 				$min = $minWait;		
 				$price = $bestPrice;
-                      		$adj = (1-($price/$ledger->avgPrice('ask'))) * 100;
 				
 				$usdAvailable = $usdAvailable/$price;
-				$ledger->addPrice(time(), $price, $usdAvailable,"bid");
 					
-				$orders = $mtGox->placeOrder("bid", $usdAvailable, $price);
+				$orders = $tradeBot->buyBTC($usdAvailable, $price);
 					
-				$ledger->reset();
 				System_Daemon::log(
 					System_Daemon::LOG_INFO, 
-					"Placing order: (amount: $usdAvailable, bid: $price, adjustment: $adj)"
+					"Placing order: (amount: $usdAvailable, bid: $price)"
 				);
 			}
 		}
 
-		unset($mtGox);
 										
 	} catch(Exception $e) {
 
@@ -215,7 +198,7 @@ while(!System_Daemon::isDying()){
 	# Take a nap for a specified offset 
 	sleep(60*$min);
 }
-$ledger->save();
+$tradeBot->save();
 System_Daemon::stop();
 
 ?>

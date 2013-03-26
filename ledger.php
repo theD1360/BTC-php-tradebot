@@ -6,11 +6,11 @@
 
 */
 
-class Ledger {
+class trader extends mtGox{
 				private $saveFile = "./.ledgerDump",
 					$balances = array(),
 					$lastTrade = 0,
-					$fee = 0.60,
+					$fee = 0.00,
 					$percentChange = 0,
 					$btc = array(0),
 					$usd = array(0),
@@ -19,11 +19,13 @@ class Ledger {
 					$orders = array("clearme"=>"firstRun"),
 					$ticker = array("ask"=>array(), "bid"=>array()),
 					$balanceLog = array(),
+					$lastBalanceChange = true,
 					$firstRun = true;
 
-					function __construct(){
+					function __construct($key ="", $secret="", $cert = "mtgox-cert"){
 						$this->load();
 						$this->lastTrade = (!$this->lastTrade)?time():$this->lastTrade;
+						parent::__construct($key, $secret, $cert);
 					}
 
 					public function addUSD($amount){
@@ -92,6 +94,18 @@ class Ledger {
 						return $this->avgs[$type];
 					}
 
+					public function sellBTC($amount, $price){
+						$this->addPrice(time(), $price, $amount, "ask");
+						$this->placeOrder("ask", $amount, $price);
+						$this->reset();			
+					}
+
+					public function buyBTC($amount, $price){
+						$this->addPrice(time(), $price, $amount, "bid");
+						$this->placeOrder("bid", $amount, $price);
+						$this->reset();			
+					}
+
 					/* This should be called logTrade */
 					public function addPrice($date, $price, $amount, $type){
 						# Store values to get weighted avg later
@@ -100,8 +114,9 @@ class Ledger {
 						$this->lastTrade = time();
 					}
 					
-					public function syncOrders($orders, $logTrade = false){
+					public function syncOrders($logTrade = false){
 						#no change just skip this
+						$orders = $this->getOrders();
 
 						if($this->orders == $orders)
 							return false;
@@ -124,21 +139,32 @@ class Ledger {
 						return $count;
 					}
 				
-					public function updateFee($fee){
-						$this->fee = $fee;
-					}
 
-					public function updateTicker($buy, $sell){
-						$this->ticker['bid'] = $buy;
-						$this->ticker['ask'] = $sell;
+					public function updateTicker(){
+						$ticker = $this->getTicker();
+						$this->ticker['bid'] = $ticker['buy']['value'];
+						$this->ticker['ask'] = $ticker['sell']['value'];
+						return $ticker;
 					}
-	
+					public function updateInfo(){
+						$info = $this->getInfo();
+												
+						$btc = $info['Wallets']["BTC"]["Balance"]["value"];
+						$usd = $info['Wallets']["USD"]["Balance"]["value"];	
+						$fee = $info['Trade_Fee'];
+		
+						$this->updateBalance($btc, $usd);
+
+						$this->fee = $fee;	
+						return $info;
+					}	
+
 					public function updateBalance($btc, $usd){
 					
 						$changed = false;
 						$newBalance = array("btc"=>$btc, "usd"=>$usd);
 						if($this->balances != $newBalance){
-							$changed = true; 
+							$changed = time(); 
 							$this->balances = $newBalance;
 							if($btc==0 || $usd==0){
 								array_unshift($this->balanceLog, $newBalance);
@@ -146,11 +172,17 @@ class Ledger {
 						}	
 
 						/* Adjust price to speed up trading */
-						if( $btc == 0 && count($this->orders)==0 && ((time() - $this->lastTrade)>60*60*24*1 || $changed == true)){
+						if( $btc == 0 && count($this->orders)==0 && ((time() - $this->lastTrade)>60*60*6 || $changed == true)){
 							$this->resetPrice();
 						}
+
+						$this->lastBalanceChange = $change;
 						$this->save();				
-						return $changed;
+						
+					}
+
+					public function balanceChanged(){
+						return $this->lastBalanceChange;
 					}
 					
 					public function reset(){
@@ -165,9 +197,11 @@ class Ledger {
 							throw new Exception("Ticker must be set before reseting price");
 
 						$this->price = array("ask"=>array(), "bid"=>array());
+						$this->percentChange = 0.0;
 						$this->avgs = array();
-						$this->percentChange = 0;
-						$this->addPrice(time(), $this->ticker['ask'], 0.0000001, "ask");
+						$avg = ($this->ticker['bid']+$this->ticker['ask'])/2;
+						$this->addPrice(time(), 100, 0.0000001, "ask");
+						$this->addPrice(time(), 1, 0.0000001, "bid");
 
 					}
 
@@ -186,7 +220,9 @@ class Ledger {
 					public function usdAvailable(){
 						return sprintf("%.5F", ($this->balances["usd"] - $this->usdOrderTotal()));
 					}
-	
+					public function getPercentChange(){
+						return $this->percentChange;
+					}	
 					public function feeAdjust($type, $random = false){
 						
 						if(empty($type))
@@ -195,8 +231,8 @@ class Ledger {
 						$type = strtolower("$type");
 						if(!in_array($type, array("bid","ask")))
 							throw new Exception("transaction type expects string 'bid' or 'ask' only in feeAdjust()");
-						$fee = ($this->fee>=$this->percentChange)?$this->fee:$this->percentChange;
-
+						//$fee = ($this->fee>=$this->percentChange)?$this->fee:$this->percentChange;
+						$fee = $this->percentChange;
 						// Ask for the avg price of the opposite type
 						$avg = $this->avgs[($type=="bid")?"ask":"bid"];
 						$max = 10000-($fee*10000);	
