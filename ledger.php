@@ -87,7 +87,7 @@ class trader extends mtGox{
 							
 						}
 						
-						$this->percentChange = $this->avgs['bid']/$this->avgs['ask'];
+						$this->percentChange = ( 1 - ( $this->avgs['bid'] / $this->avgs['ask'] ) ) * 100;
 					}	
 
 					public function avgPrice($type){
@@ -193,15 +193,17 @@ class trader extends mtGox{
 					
 					public function resetPrice(){
 						
-						if(empty($this->ticker['ask']) || empty($this->ticker['bid']))
-							throw new Exception("Ticker must be set before reseting price");
+						while(empty($this->ticker['ask']) || empty($this->ticker['bid'])){
+							$this->updateTicker();
+						}
+							
 
 						$this->price = array("ask"=>array(), "bid"=>array());
 						$this->percentChange = 0.0;
 						$this->avgs = array();
 						$avg = ($this->ticker['bid']+$this->ticker['ask'])/2;
-						$this->addPrice(time(), 100, 0.0000001, "ask");
-						$this->addPrice(time(), 1, 0.0000001, "bid");
+						$this->addPrice(time(), $avg, 0.0000001, "ask");
+						$this->addPrice(time(), $avg, 0.0000001, "bid");
 
 					}
 
@@ -246,8 +248,6 @@ class trader extends mtGox{
 
 						$fee = $fee + ((double) ($adjust/10000));
 					
-						//$fee = $fee * 2;
-
 						if($type == "bid")
 							$price = ($avg-($avg*($fee/100)));
 					
