@@ -46,7 +46,8 @@ class trader extends mtGox{
 					}
 				/* Retrieve this objects properties from save file */	
 					public function load(){
-						$className = get_class();
+						$className = get_class($this);
+						$parentClassName = get_parent_class($this);
 						if(file_exists($this->saveFile) && is_readable($this->saveFile)){
 							
 							$settings = json_decode(file_get_contents($this->saveFile), true);
@@ -54,7 +55,7 @@ class trader extends mtGox{
 							if(!empty($settings)){
 
 								foreach($settings as $key=> $value){
-									$opt = trim(substr($key, strlen($className)+1));
+									$opt = trim(preg_replace("/^($className|$parentClassName)/", "", $key));
 									if(!empty($opt)){
 										echo "loading: $opt = $value \n";
 										$this->{$opt} = $value;
