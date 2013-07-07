@@ -13,9 +13,10 @@ class mtGox{
 		$query = array(),
 		$queryString="",
 		$headers = array(),
-		$basePath = "https://mtgox.com/api",
+		$basePath = "https://data.mtgox.com/api",
 		$apiVersion = '1',
-		$apiURL = "";
+        $apiURL = "",
+        $_cache = array();
 					
 	function __construct($key = "", $secret = "", $cert = "mtgox-cert"){
 	
@@ -25,7 +26,17 @@ class mtGox{
 				$this->key = $key;
 				$this->secret = $secret;
 				$this->certFile = $cert;
-	}
+    }
+
+    private function cache($key, $callback){
+        if( (time()-$this->_cache[$key]['time']) > (60*5) || !isset($this->_cache[$key]) ){
+            $this->_cache[$key]['time'] = time();
+            $this->_cache[$key]['data'] = call_user_func($callback);
+        
+        }
+
+        return $this->_cache[$key]['data'];
+    }
 
 	// Simplify placing orders and follow proper currency value handling
 	public function placeOrder($type = null, $amount = null, $rate=null, $currency ="BTCUSD"){
@@ -49,21 +60,45 @@ class mtGox{
 		return $this->sendRequest();
 	}
 	
-	public function getInfo(){
-		$this->setPath("generic", "private", "info");
-		return $this->sendRequest();
-	}
+    public function getInfo(){
+        $obj = $this;
+        return $this->cache("getInfo", function() use ($obj){
+                $obj->setPath("generic", "private", "info");
+		        return $obj->sendRequest();
+            });
+    }
 	
 	public function getTicker($currency="BTCUSD"){
-		$this->setPath($currency, "ticker");
-		return $this->sendRequest();
+        $obj = $this;
+        return $this->cache("getTicker", function() use ($currency, $obj){
+		        $obj->setPath($currency, "ticker");
+                return $obj->sendRequest();
+            });
 	}
 	
 	public function getOrders(){
-		$this->setPath("generic", "private", "orders");
-		return $this->sendRequest();
+        $obj = $this;
+        return $this->cache("getOrders", function() use ($obj){
+		        $obj->setPath("generic", "private", "orders");
+		        return $obj->sendRequest();
+            });
 	}
-	
+
+    public function getOrderResult($type = null, $oid = null){
+        $obj = $this;
+        return $this->cache("orderResult", function() use ($type, $oid, $obj){
+                if(!$type || !$oid)
+                    throw new Exception("Order result requires and order type and order id to be specified");
+
+                $obj->setPath("generic", "private", "order", "result");
+                $obj->setParam("type", $type);
+                $obj->setParam("order", $oid);
+
+                return $obj->sendRequest();
+            });
+
+    }
+
 	public function setParam($key, $value){
 		return	$this->query[$key] = $value;
 	}

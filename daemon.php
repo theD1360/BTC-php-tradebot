@@ -3,7 +3,7 @@
 
 
 require_once "trade.php";
-require_once "ledger.php";
+require_once "OrderManager.php";
 
 // Make it possible to test in source directory
 // This is for PEAR developers only
@@ -53,132 +53,103 @@ System_Daemon::log(
 
 
 $config = json_decode(file_get_contents("config.json"), true);
-
-$min = ( is_int( $config['wait'] ) ) ? $config['wait'] : 1;
-$minWait = ( is_int( $config['throttling']['low'] ) ) ? $config['throttling']['low'] : $min;
-$maxWait = ( is_int( $config['throttling']['high'] ) ) ? $config['throttling']['high'] : 30;
-$tradeBalanceMinBTC = ( is_numeric( $config['trade']['balanceMinimum']['BTC'] ) ) ? $config['trade']['balanceMinimum']['BTC'] : 1;
-$tradeBalanceMinUSD = ( is_numeric( $config['trade']['balanceMinimum']['USD'] ) ) ? $config['trade']['balanceMinimum']['USD'] : 1;
-$randomness = false;
+$min = $config['wait'];
 
 try {
 	# create mtGox object
-	$tradeBot = new trader( $config['mtgox']['key'],$config['mtgox']['secret'], $config['mtgox']['certFile']);
+	$tradeBot = new MtGox( $config['mtgox']['key'],$config['mtgox']['secret'], $config['mtgox']['certFile']);
 }catch( Exception $e){
 	echo $e->getMessage();
 	exit;
 }
 
+# Start instance of order manager
+$orders = new OrderManager();
 
+# priming read for orders in the event that we have orders
+$openOrders = $tradeBot->getOrders();
+foreach($openOrders as $order){
+   // var_dump($order);
+    if($order['status'] == "open"){
+        $newOrder = new Order();
+        $newOrder->importOrder($order);
+        $orders->addOrder( $newOrder );
+    }
+}
 
-if($tradeBot->isFirstRun)
-	System_Daemon::log(
-		System_Daemon::LOG_INFO, 
-		"Detected a first run scenario. No save file loaded..."
-	);
+//var_dump($orders);
 
-
+//die();
 
 while(!System_Daemon::isDying()){
 	
-	# Turn on throttling if setting is available
-	if( isset( $config['throttling'] ) ){
-		$min += ( is_int( $config['throttling']['interval'] ) ) ? $config['throttling']['interval'] : 1 ;
-	
-		# Set a maximum amount of minutes it should sleep
-		if($min>$maxWait)
-			$min = $minWait;
-	}
 	
 
 	try {
-		# Check and log orders into the tradeBot
-		$syncRes = $tradeBot->syncOrders($firstRun);
-		
-		# Get my data
-		$info = $tradeBot->updateInfo();
+        # Get My info
+        $info = $tradeBot->getInfo();
 		
 
 		# Get ticker data
-		$ticker = $tradeBot->updateTicker();
+		$ticker = $tradeBot->getTicker();
 
-
-		$btcAvailable = $tradeBot->btcAvailable();
-		$usdAvailable = $tradeBot->usdAvailable();
-
-		$percentChange = $tradeBot->getPercentChange();
+//        $orderLog = $tradeBot->getOrders();
 		
 		// anounce ticker info		
 		System_Daemon::log(
 			System_Daemon::LOG_INFO, 
-			"ticker (ask: {$ticker['sell']['value']}, buy: {$ticker['buy']['value']}, current percent change: {$percentChange})"
+			"ticker (ask: {$ticker['sell']['value']}, buy: {$ticker['buy']['value']}, avg: {$ticker['avg']['value']})"
 		);
 
+        
+        $balanceChanged = ( $info['Wallets']['USD']['Balance']['value'] > $usdAvailable ) ? true : false ;
+
+        // Get USD funds from wallet 
+        $usdAvailable = $info['Wallets']['USD']['Balance']['value'];
+
+        // Check tracked USD total
+        $usdManagedTotal = $orders->getTotalsUSD();
+
+        $trueAvailable = ($usdAvailable - $usdManagedTotal);
+        
+        if($trueAvailable > 0 && $balanceChanged){
+		    // Announce Discovery of new funds		
+		    System_Daemon::log(
+		    	System_Daemon::LOG_INFO, 
+		    	"Unmanaged funds at {$trueAvailable}USD. Currently managing {$usdManagedTotal}USD"
+		    );
+            $split = $trueAvailable / $ticker['avg']['value'];
+            if($split > 0.5){
+                $orders->addOrder( new Order( $trueAvailable ) );
+		        // anounce ticker info		
+		        System_Daemon::log(
+			         System_Daemon::LOG_INFO, 
+			         "Adding order from new funds for {$trueAvailable}USD"
+	            );
+                
+            }
+        }
 
 
-		$rand = rand(1, 10);
-		// Begin Drafting a trade
-		$btcAvailable = $btcAvailable/$rand;
-		$price = $tradeBot->feeAdjust("ask", $randomness);
+//        if($orderCache != $orderLog){
 
-		if($btcAvailable>$tradeBalanceMinBTC){
+                // trigger the action for each order in orders. This will automatically decide what actions to take.
+            $orders->actions($tradeBot, function($trigger, $buyPrice, $sellPrice, $BTC, $USD, $status){
+                 System_Daemon::log(
+                     System_Daemon::LOG_INFO,
+                     "Order Placed: Changed from {$trigger} To: {$status}, Amounts: {$BTC}BTC, {$USD}USD, Prices: Buy({$buyPrice}) Sell({$sellPrice})"
+                 );
+            }); 
 
+            // anounce ticker info		
+        	System_Daemon::log(
+	        	System_Daemon::LOG_INFO, 
+        		"Managing ".$orders->getCount()." orders. buy(".$orders->getCount('bid').") sell(".$orders->getCount('ask').") pending(".$orders->getCount("pending").") fee({$info['Trade_Fee']})"
+        	);
+            
+//            $orderCache = $orderLog;
+//        }
 					
-			System_Daemon::log(
-				System_Daemon::LOG_INFO, 
-				"drafting (ask: {$price}, amount: $btcAvailable BTC)"
-			);
-
-			$bestPrice = ($ticker['sell']['value'] > $ticker['buy']['value'])?$ticker['sell']['value']:$ticker['buy']['value'];
-
-			$shortSell = ($bestPrice/$price)*100;
-			// if our drafted trade is profitable then push a trade
-			//if($bestPrice>$price || ($usdAvailable <= $tradeBalanceMinUSD && $shortSell <= 95)){
-			
-			if($bestPrice>$price){
-				$min = $minWait;								
-				$price = $bestPrice;
-
-
-				# Log this price in the tradeBot
-				$orders = $tradeBot->sellBTC($btcAvailable, $price);
-				
-
-				System_Daemon::log(
-					System_Daemon::LOG_INFO, 
-					"Placing order: (amount: $btcAvailable, ask: $price)"
-				);
-			}
-			
-		}
-		
-		$rand = rand(1, 10);			
-		// Begin drafting a trade		
-		$price = $tradeBot->feeAdjust("bid", $randomness);
-		$usdAvailable = ($usdAvailable/$rand);
-
-		if($usdAvailable>$tradeBalanceMinUSD){
-
-			System_Daemon::log(
-				System_Daemon::LOG_INFO, 
-				"drafting (bid: {$price}, amount: $usdAvailable USD)"
-			);
-			$bestPrice = ($ticker['sell']['value'] < $ticker['buy']['value'])?$ticker['sell']['value']:$ticker['buy']['value'];
-			// If our our drafted trade is profitable push a trade
-			if($bestPrice<$price){
-				$min = $minWait;		
-				$price = $bestPrice;
-				
-				$usdAvailable = $usdAvailable/$price;
-					
-				$orders = $tradeBot->buyBTC($usdAvailable, $price);
-					
-				System_Daemon::log(
-					System_Daemon::LOG_INFO, 
-					"Placing order: (amount: $usdAvailable, bid: $price)"
-				);
-			}
-		}
 
 										
 	} catch(Exception $e) {
@@ -189,14 +160,17 @@ while(!System_Daemon::isDying()){
 		);
 
 	}
-	
+/*	
 	System_Daemon::log(
 		System_Daemon::LOG_INFO, 
 		"Sleeping for $min minutes"
 	);
-		
-	# Take a nap for a specified offset 
-	sleep(60*$min);
+*/		
+
+    # Take a nap for a specified offset 
+
+    sleep(60*$min);
+
 }
 $tradeBot->save();
 System_Daemon::stop();
