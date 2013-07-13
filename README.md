@@ -3,6 +3,22 @@ mtgox-php-tradebot
 
 Tradebot daemon for MtGox Written in PHP
 
+Version 2.0
+===========
+New trader takes a completely different approach to managing funds. 
+Trades are no longer based on a total average anymore instead an order manager creates an order based off your USD balance
+and manages it indefinitely. Once the diffrence of total managed USD funds and actual USD funds is high enough to open 
+a new order the trader will create it and manage it alongside your other orders.
+
+New bot now pings the ticker at a constant rate that is set in the config when an order has been closed it will trigger
+an action (buy|sell|pending|complete) on the order object.
+
+Another notable change is that the bot will no longer save its state when stopped or reset. Hoping to change this soon.
+
+*The new version will do it's best to import currently existing orders on startup but there seems to be some bad math* 
+*going on so it is not advised that you do so.*
+
+
 Disclaimer
 ==========
 
@@ -21,6 +37,8 @@ Dependencies
 * PEAR Package System_Daemon
 * PHP5 CLI
 * MtGox Account
+
+*As of version 2.0 the bot no longer pays attention to BTC balances you will need to have a USD balance when starting the bot*
 
 To get started simply get your API access key and secret from the mtgox website and enter them 
 in the `config.json` file where it says key and secret under the mtgox object.
