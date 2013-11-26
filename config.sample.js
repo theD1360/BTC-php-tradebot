@@ -1,0 +1,8 @@
+{
+	"mtgox":{
+		"key" : "your key here",
+		"secret" : "your secret here",
+		"certFile" : "mtgox-cert"	
+	},
+	"wait" : 15
+}
