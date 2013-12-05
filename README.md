@@ -3,20 +3,22 @@ mtgox-php-tradebot
 
 Tradebot daemon for MtGox Written in PHP
 
-Version 2.0
+Version 3.0
 ===========
-New trader takes a completely different approach to managing funds. 
-Trades are no longer based on a total average anymore instead an order manager creates an order based off your USD balance
-and manages it indefinitely. Once the diffrence of total managed USD funds and actual USD funds is high enough to open 
-a new order the trader will create it and manage it alongside your other orders.
+Another complete refactor of the code. This version now uses a different method for making trades. 
+Now instead of trying to manage each order, which was a hassle btw, I have opted to use a EMA/SMA convergence
+divergence methodology. This is not gauranteed to make profit on every trade but it attempts to predict the price
+change based on the EMA of the percent change for the last 25 trades. This appears to be working with limited success
+and would appreciate if some more experienced programmers would contribute to this project. :)
 
-New bot now pings the ticker at a constant rate that is set in the config when an order has been closed it will trigger
-an action (buy|sell|pending|complete) on the order object.
+What to expect from the new version.
 
-Another notable change is that the bot will no longer save its state when stopped or reset. Hoping to change this soon.
+* Cleaner code.
+* A more standard trading algorithm
+* Not much else :\
 
-*The new version will do it's best to import currently existing orders on startup but there seems to be some bad math* 
-*going on so it is not advised that you do so.*
+Sorry for changing the code so drastically every version. I don't have very much experience with writing trading 
+alogrithms.
 
 
 Disclaimer
