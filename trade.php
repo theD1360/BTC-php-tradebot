@@ -1,4 +1,5 @@
 <?php
+
 /*
         Name       : MtGox API v1 Trading Class
         Author     : Diego O. Alejos
@@ -6,7 +7,9 @@
  
 */
 
-class mtGox{
+
+class MtGox {
+
 	private $key, 
 		$secret,
 		$certFile,
@@ -57,8 +60,36 @@ class mtGox{
 			$rate = round($rate * 1E5);
 			$this->setParam("price_int", $rate);
 		}
+		
+		
 		return $this->sendRequest();
+
 	}
+	
+	public function getOrderInfo($oid = null, $type = null){
+	    if(!$oid)
+	        throw new Exception("getOrderInfo requires an oid value");
+	    if(!$type)
+	        throw new Exception("getOrderInfo requires an order type");
+	        
+	    $this->setPath("generic", "private", "order", "result");
+	    $this->setParam("type", $type);
+	    $this->setParam("oid", $oid);
+	    
+	    return $this->sendRequest();
+	    
+	}
+	
+	public function cancelOrder($oid = null, $currency = "BTCUSD"){
+	    if(!$oid)
+	        throw new Exception("cancelOrder requires an oid value");
+	    
+	    $this->setPath("$currency", "private", "order", "cancel");
+	    $this->setParam("oid", $oid);
+	        
+	    return $this->sendRequest();
+
+	} 
 	
     public function getInfo(){
         $obj = $this;

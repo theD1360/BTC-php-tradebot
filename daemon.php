@@ -2,8 +2,6 @@
 <?php
 
 
-require_once "trade.php";
-require_once "OrderManager.php";
 
 // Make it possible to test in source directory
 // This is for PEAR developers only
@@ -11,8 +9,9 @@ ini_set('include_path', ini_get('include_path').':..');
 
 // Turn on error reporting and include daemon class
 error_reporting(E_ALL);
-require_once "System/Daemon.php";
 
+require_once "System/Daemon.php";
+require_once "OrderManager.php";
 
 
 
@@ -57,99 +56,67 @@ $min = $config['wait'];
 
 try {
 	# create mtGox object
-	$tradeBot = new MtGox( $config['mtgox']['key'],$config['mtgox']['secret'], $config['mtgox']['certFile']);
+	$mtgox = new MtGox( $config['mtgox']['key'],$config['mtgox']['secret'], $config['mtgox']['certFile']);
 }catch( Exception $e){
-	echo $e->getMessage();
+	echo "poop". $e->getMessage();
 	exit;
 }
 
 # Start instance of order manager
-$orders = new OrderManager();
+$orders = new OrderManager($mtgox);
+# Start instance of ticker trends
+$trends = new TickerTrends($mtgox);
 
-# priming read for orders in the event that we have orders
-$openOrders = $tradeBot->getOrders();
-foreach($openOrders as $order){
-   // var_dump($order);
-    if($order['status'] == "open"){
-        $newOrder = new Order();
-        $newOrder->importOrder($order);
-        $orders->addOrder( $newOrder );
-    }
-}
-
-//var_dump($orders);
-
-//die();
 
 while(!System_Daemon::isDying()){
 	
 	
 
 	try {
-        # Get My info
-        $info = $tradeBot->getInfo();
-		
-
-		# Get ticker data
-		$ticker = $tradeBot->getTicker();
-
-//        $orderLog = $tradeBot->getOrders();
-		
+	
+	    $trends->updateTicker();
+	    
+	    $orders->update();
+	    
+	    $balanceBTC = $orders->getAvailableBalance("BTC");
+	    $balanceUSD = $orders->getAvailableBalance("USD");
+	    $orderCount = $orders->length();
+	    $lastPrice = $trends->getTickerData()->last->value;
+	    $suggestedAction = $trends->detectSwing();
+	    $trendOverall = $trends->getSMA();
+	    $trendNow = $trends->getEMA();
+	    $prediction = $trends->predict($lastPrice);
+	    
 		// anounce ticker info		
 		System_Daemon::log(
 			System_Daemon::LOG_INFO, 
-			"ticker (ask: {$ticker['sell']['value']}, buy: {$ticker['buy']['value']}, avg: {$ticker['avg']['value']})"
-		);
-
-        
-        $balanceChanged = ( $info['Wallets']['USD']['Balance']['value'] > $usdAvailable ) ? true : false ;
-
-        // Get USD funds from wallet 
-        $usdAvailable = $info['Wallets']['USD']['Balance']['value'];
-
-        // Check tracked USD total
-        $usdManagedTotal = $orders->getTotalsUSD();
-
-        $trueAvailable = ($usdAvailable - $usdManagedTotal);
-        
-        if($trueAvailable > 0 && $balanceChanged){
-		    // Announce Discovery of new funds		
-		    System_Daemon::log(
-		    	System_Daemon::LOG_INFO, 
-		    	"Unmanaged funds at {$trueAvailable}USD. Currently managing {$usdManagedTotal}USD"
-		    );
-            $split = $trueAvailable / $ticker['avg']['value'];
-            if($split > 0.5){
-                $orders->addOrder( new Order( $trueAvailable ) );
-		        // anounce ticker info		
-		        System_Daemon::log(
-			         System_Daemon::LOG_INFO, 
-			         "Adding order from new funds for {$trueAvailable}USD"
-	            );
-                
-            }
-        }
-
-
-//        if($orderCache != $orderLog){
-
-                // trigger the action for each order in orders. This will automatically decide what actions to take.
-            $orders->actions($tradeBot, function($trigger, $buyPrice, $sellPrice, $BTC, $USD, $status){
-                 System_Daemon::log(
-                     System_Daemon::LOG_INFO,
-                     "Order Placed: Changed from {$trigger} To: {$status}, Amounts: {$BTC}BTC, {$USD}USD, Prices: Buy({$buyPrice}) Sell({$sellPrice})"
-                 );
-            }); 
-
-            // anounce ticker info		
-        	System_Daemon::log(
-	        	System_Daemon::LOG_INFO, 
-        		"Managing ".$orders->getCount()." orders. buy(".$orders->getCount('bid').") sell(".$orders->getCount('ask').") pending(".$orders->getCount("pending").") fee({$info['Trade_Fee']})"
-        	);
-            
-//            $orderCache = $orderLog;
-//        }
-					
+			"TREND: EMA[$trendNow] SMA[$trendOverall] AVG PRICE: $lastPrice PREDICTED PRICE: $prediction ORDERS: $orderCount BALANCE: $balanceUSD usd/$balanceBTC btc ACTION: $suggestedAction"
+		);	    
+	    
+	    // Place orders if we have enough cash or bitcoins for half of our available balances
+	    // smallest order size is 1.0E-2
+	    
+	    if($suggestedAction == "buy" && (($balanceUSD/$prediction)/2) > 1.0E-2 ){
+	        
+	        $buy = $mtgox->placeOrder("bid", (($balanceUSD/$prediction)/2), $prediction);
+	        
+	        System_Daemon::log(
+		        System_Daemon::LOG_INFO, 
+		        "Placed buy order $buy"
+	        );	        	        
+	    }
+	    
+	    if($suggestedAction == "sell" && ($balanceBTC/2) > 1.0E-2 ){
+	        
+	        $sell = $mtgox->placeOrder("ask", ($balanceBTC/2), $prediction);	   
+	       
+	        System_Daemon::log(
+		        System_Daemon::LOG_INFO, 
+		        "Placed sell order $sell"
+	        );
+	            
+	    }	    
+	    
 
 										
 	} catch(Exception $e) {
@@ -160,14 +127,9 @@ while(!System_Daemon::isDying()){
 		);
 
 	}
-/*	
-	System_Daemon::log(
-		System_Daemon::LOG_INFO, 
-		"Sleeping for $min minutes"
-	);
-*/		
 
-    # Take a nap for a specified offset 
+
+    // Take a nap for a specified offset 
 
     sleep(60*$min);
 
