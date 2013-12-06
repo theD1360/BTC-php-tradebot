@@ -11,7 +11,7 @@ require_once "json.php";
 class TickerTrends extends json {
 
     protected $mtgox,
-              $max = 25;
+              $max = 250;
 
     public function __construct($mtgox)
     {
@@ -88,19 +88,17 @@ class TickerTrends extends json {
 
     public function getEMA(){
         
-        $trend = 0;
         $length = $this->length();
         $lastEMA = $this->getSMA();
         $multiplier = 2/($length+1);
         
-        $this->each(function($item) use (&$trend, $length, &$lastEMA, $multiplier){
+        $this->each(function($item) use ($length, &$lastEMA, $multiplier){
             
             $lastEMA = ($item->percentChange * $multiplier) + ($lastEMA * (1 - $multiplier) );
-            $trend += $lastEMA; 
 
         });
 
-        return $trend/$length;
+        return $lastEMA;
 
     }
 
