@@ -83,14 +83,16 @@ while(!System_Daemon::isDying()){
 	    $orderCount = $orders->length();
 	    $lastPrice = $trends->getTickerData()->last->value;
 	    $suggestedAction = $trends->detectSwing();
-	    $trendOverall = $trends->getSMA();
-	    $trendNow = $trends->getEMA();
-	    $prediction = $trends->predict($lastPrice);
+	    $SMA = $trends->getSMA();
+	    $fullEMA = $trends->getEMA();
+	    $halfEMA = $trends->getEMA(2);
+
+	    $prediction = $lastPrice; //$trends->predict($lastPrice);
 	    
 		// anounce ticker info		
 		System_Daemon::log(
 			System_Daemon::LOG_INFO, 
-			"TREND: EMA[$trendNow] SMA[$trendOverall] AVG PRICE: $lastPrice PREDICTED PRICE: $prediction ORDERS: $orderCount BALANCE: $balanceUSD usd/$balanceBTC btc ACTION: $suggestedAction"
+			"TREND: EMA: $halfEMA/$fullEMA, AVG PRICE: $SMA, PRICE: $lastPrice, ORDERS: $orderCount, BALANCE: $balanceUSD USD / $balanceBTC BTC, ACTION: $suggestedAction"
 		);	    
 	    
 	    // Place orders if we have enough cash or bitcoins for half of our available balances
