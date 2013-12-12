@@ -11,7 +11,7 @@ require_once "json.php";
 class TickerTrends extends json {
 
     protected $mtgox,
-              $max = 250;
+              $max = 360;
 
     public function __construct($mtgox)
     {
@@ -86,21 +86,29 @@ class TickerTrends extends json {
     
     }
 
-    public function getEMA(){
+    public function getEMA($divisor = null){
         
         $length = $this->length();
         $lastEMA = $this->getSMA();
         $multiplier = 2/($length+1);
-        
-        $this->each(function($item) use ($length, &$lastEMA, $multiplier){
-            
-            $lastEMA = ($item->percentChange * $multiplier) + ($lastEMA * (1 - $multiplier) );
+	$subset = $this;
 
+	if(!empty($divisor)){
+	    $sliceAt = $length/$divisor;
+	    $multiplier = 2/($sliceAt+1);
+	    $subset = $subset->slice($sliceAt);
+	}
+		
+        $subset->each(function($item) use (&$lastEMA, $multiplier){
+
+            	$lastEMA = ($item->last->value * $multiplier) + ($lastEMA * (1 - $multiplier) );
+	    
         });
 
         return $lastEMA;
 
     }
+
 
     public function getSMA(){
         
@@ -108,7 +116,7 @@ class TickerTrends extends json {
   
         $this->each(function($item) use (&$trend){
             
-            $trend = $trend + ($item->percentChange); 
+            $trend = $trend + ($item->last->value); 
       
         });
 
@@ -118,16 +126,13 @@ class TickerTrends extends json {
     
     public function detectSwing()
     {
-        $currentPercentChange = $this->last()->percentChange;
-        $ema = $this->getEMA();
-        $sma = $this->getSMA();
-        $currentPrice = $this->getTickerData()->last->value;
-        $predictedPrice = $this->predict($currentPrice);
+        $EMA = $this->getEMA();
+        $halfEMA = $this->getEMA(2);
         
         // market trend is above zero we are currently climbing
-        if($ema > $sma && $predictedPrice > $currentPrice)
+        if($halfEMA < $EMA)
             return "sell";
-        elseif($ema < $sma && $predictedPrice < $currentPrice)
+        elseif($halfEMA > $EMA)
             return "buy";     
     
         return "hold";

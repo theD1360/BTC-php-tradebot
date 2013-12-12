@@ -104,6 +104,12 @@ class json {
         return $this->data[$index];
     }
 
+    public function slice($offset){
+	$slice = array_slice($this->data, $offset);
+
+	return new json($slice); 
+    }
+
     public function remove($index = null){
         unset($this->data[$index]);
     }
