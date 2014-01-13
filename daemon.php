@@ -108,9 +108,9 @@ while(!System_Daemon::isDying()){
 	        );	        	        
 	    }
 	    
-	    if($suggestedAction == "sell" && ($balanceBTC/2) > 1.0E-2 ){
+	    if($suggestedAction == "sell" && $balanceBTC > 1.0E-2 ){
 	        
-	        $sell = $mtgox->placeOrder("ask", ($balanceBTC/2), $prediction);	   
+	        $sell = $mtgox->placeOrder("ask", $balanceBTC, $prediction);	   
 	       
 	        System_Daemon::log(
 		        System_Daemon::LOG_INFO, 

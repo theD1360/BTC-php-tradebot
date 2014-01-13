@@ -11,7 +11,7 @@ require_once "json.php";
 class TickerTrends extends json {
 
     protected $mtgox,
-              $max = 360;
+              $max = 36;
 
     public function __construct($mtgox)
     {
@@ -128,11 +128,12 @@ class TickerTrends extends json {
     {
         $EMA = $this->getEMA();
         $halfEMA = $this->getEMA(2);
+	$SMA = $this->getSMA();
         
         // market trend is above zero we are currently climbing
-        if($halfEMA < $EMA)
+        if($halfEMA < $EMA && $halfEMA > $SMA)
             return "sell";
-        elseif($halfEMA > $EMA)
+        elseif($halfEMA > $EMA && $halfEMA < $SMA)
             return "buy";     
     
         return "hold";
