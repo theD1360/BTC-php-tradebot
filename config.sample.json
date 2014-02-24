@@ -4,5 +4,5 @@
 		"secret" : "your secret here",
 		"certFile" : "mtgox-cert"	
 	},
-	"wait" : 15
+	"wait" : 60
 }

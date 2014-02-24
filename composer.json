@@ -1,0 +1,20 @@
+{
+    "name": "thed1360/btc-tradebot",
+    "authors": [
+        {
+            "name": "Diego Alejos",
+            "email": "lego.admin@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=5.3.0",
+        "thed1360/array-helper": "dev-master",
+        "thed1360/mtgox-api-v1-php-class": "dev-master",
+        "pear/system_daemon": "dev-master"
+    },
+    "autoload": {
+        "psr-0": {
+            "OrderManager": "src/"
+        }
+    }
+}

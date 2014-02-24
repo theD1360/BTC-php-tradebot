@@ -1,20 +1,28 @@
 #!/usr/bin/php -q
 <?php
 
+require __DIR__ . '/vendor/autoload.php';
 
+use \System_Daemon; 
+use \OrderManager\OrderManager;
+use \OrderManager\TickerTrends;
+use \MtGox\MtGox;
+use \Utilities\Arr;
 
-// Make it possible to test in source directory
-// This is for PEAR developers only
-ini_set('include_path', ini_get('include_path').':..');
+// get CLI arguments
+$args = new Arr($argv);
+$args = $args->slice(1);
 
-// Turn on error reporting and include daemon class
-error_reporting(E_ALL);
+// get config file options
+$config_string = file_get_contents(__DIR__."/config.json");
+$config = new Arr($config_string);
 
-require_once "System/Daemon.php";
-require_once "OrderManager.php";
+// merge in our CLI args into our config
+$config->merge([
+	"dry" => ($args->contains("--dry"))?$args->contains("--dry"):$config->dry
+]);
 
-
-
+$dry_notice = ($config->dry)?"DRY RUN!":"CAUTION::LIVE RUN!!!";
 
 
 // Bare minimum setup
@@ -22,12 +30,6 @@ System_Daemon::setOption("appName", "mtgox");
 System_Daemon::setOption("authorEmail", "lego.admin@gmail.com");
 System_Daemon::setOption("appDescription", "mtgox trading bot");
 System_Daemon::setOption("authorName", "diego alejos");
-
-//System_Daemon::setOption("appDir", dirname(__FILE__));
-System_Daemon::log(
-	System_Daemon::LOG_INFO, 
-	"Daemon not yet started so this will be written on-screen"
-);
 
 # Write a init.d script
 if (($initd_location = System_Daemon::writeAutoRun()) === false) {
@@ -39,6 +41,11 @@ if (($initd_location = System_Daemon::writeAutoRun()) === false) {
     );
 }
 
+
+// tell us if we're live or not  
+System_Daemon::notice($dry_notice);
+
+
 // Spawn Deamon!
 
 System_Daemon::start();
@@ -49,10 +56,6 @@ System_Daemon::log(
 	"' spawned! This will be written to ".
 	System_Daemon::getOption("logLocation")
 );
-
-
-$config = json_decode(file_get_contents("config.json"), true);
-$min = $config['wait'];
 
 try {
 	# create mtGox object
@@ -69,8 +72,6 @@ $trends = new TickerTrends($mtgox);
 
 
 while(!System_Daemon::isDying()){
-	
-	
 
 	try {
 	
@@ -82,39 +83,63 @@ while(!System_Daemon::isDying()){
 	    $balanceUSD = $orders->getAvailableBalance("USD");
 	    $orderCount = $orders->length();
 	    $lastPrice = $trends->getTickerData()->last->value;
+	    $buyPrice = $trends->getTickerData()->buy->value;
+	    $sellPrice = $trends->getTickerData()->sell->value;
+
 	    $suggestedAction = $trends->detectSwing();
 	    $SMA = $trends->getSMA();
 	    $fullEMA = $trends->getEMA();
-	    $halfEMA = $trends->getEMA(2);
+	    $halfEMA = $trends->getShortEMA();
 
-	    $prediction = $lastPrice; //$trends->predict($lastPrice);
+	    $hourlAvg = $trends->getHourlyAvg();
 	    
 		// anounce ticker info		
 		System_Daemon::log(
 			System_Daemon::LOG_INFO, 
-			"TREND: EMA: $halfEMA/$fullEMA, AVG PRICE: $SMA, PRICE: $lastPrice, ORDERS: $orderCount, BALANCE: $balanceUSD USD / $balanceBTC BTC, ACTION: $suggestedAction"
+			sprintf("EMA: %01.2f(16)/%01.2f(36), AVG: %01.2f, Hourly: %01.2f, LAST: %01.2f, BUY: %01.2f, SELL: %01.2f, ORDERS: %s, BALANCE: %01.2fUSD | %01.2fBTC, ACTION: %s, SETS: %s",
+				$halfEMA,
+				$fullEMA,
+				$SMA,
+				$hourlAvg,
+				$lastPrice,
+				$buyPrice,
+				$sellPrice,
+				$orderCount,
+				$balanceUSD,
+				$balanceBTC,
+				$suggestedAction,
+				$trends->length()
+				)
+
+			
 		);	    
 	    
 	    // Place orders if we have enough cash or bitcoins for half of our available balances
 	    // smallest order size is 1.0E-2
 	    
-	    if($suggestedAction == "buy" && (($balanceUSD/$prediction)/2) > 1.0E-2 ){
+	    if($suggestedAction == "buy" && (($balanceUSD/$buyPrice)/2) > 1.0E-2 ){
 	        
-	        $buy = $mtgox->placeOrder("bid", (($balanceUSD/$prediction)/2), $prediction);
-	        
+	        if(!$config->dry)
+	        	$buy = $mtgox->placeOrder("bid", (($balanceUSD/$buyPrice)/2), $buyPrice);
+	        else
+	        	$buy = "[dry run]";
+
 	        System_Daemon::log(
 		        System_Daemon::LOG_INFO, 
-		        "Placed buy order $buy"
+		        sprintf("Placed buy order %01.2f", $buy)
 	        );	        	        
 	    }
 	    
 	    if($suggestedAction == "sell" && $balanceBTC > 1.0E-2 ){
 	        
-	        $sell = $mtgox->placeOrder("ask", $balanceBTC, $prediction);	   
-	       
+	        if(!$config->dry)
+	        	$sell = $mtgox->placeOrder("ask", $balanceBTC, $sellPrice);	   
+	       	else
+	       		$sell = "[dry run]";
+
 	        System_Daemon::log(
 		        System_Daemon::LOG_INFO, 
-		        "Placed sell order $sell"
+		        sprintf("Placed buy order %01.2f", $sell)
 	        );
 	            
 	    }	    
@@ -133,7 +158,7 @@ while(!System_Daemon::isDying()){
 
     // Take a nap for a specified offset 
 
-    sleep(60*$min);
+    sleep(60*$config->wait);
 
 }
 $tradeBot->save();
