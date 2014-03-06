@@ -1,8 +1,10 @@
 {
-	"mtgox":{
+	"auth":{
 		"key" : "your key here",
 		"secret" : "your secret here",
-		"certFile" : "mtgox-cert"	
+		"client_id" : 000000	
 	},
-	"wait" : 15
+	"driver": "bitstamp",
+	"wait" : 5,
+	"dry" : false
 }

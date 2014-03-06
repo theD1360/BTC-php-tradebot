@@ -35,27 +35,51 @@ contributing to this project. If you would like to show your appreciation just s
 Getting Started
 ===============
 
-Dependencies
-* PEAR Package System_Daemon
+__Dependencies__
+* [Composer](https://getcomposer.org/) 
 * PHP5 CLI
-* MtGox Account
+* ~~MtGox~~ [Bitstamp](https://www.bitstamp.net) Account [(working on kraken, and btc-e support)](https://github.com/theD1360/btc-ex)
 
-*As of version 2.0 the bot no longer pays attention to BTC balances you will need to have a USD balance when starting the bot*
+__Installing__
 
-To get started simply get your API access key and secret from the mtgox website and enter them 
-in the `config.json` file where it says key and secret under the mtgox object.
+After getting all your dependencies downloaded, you will need to either clone this repo or download it to your server.
+Once you have done so go ahead and drop into your directory and run:
 
-once you've configured your bot go to your terminal and drop into the bot directory and run the follwing command
+`$ composer install --require-dev`
+
+
+__Setup Config__
+
+To get started we need to create a `config.json` you can use rename the `config.sample.json` which looks like this
+
+```
+{
+	"auth":{
+		"key" : "your key here",
+		"secret" : "your secret here",
+		"client_id" : 000000	
+	},
+	"driver": "bitstamp",
+	"wait" : 5,
+	"dry" : false
+}
+
+```
+
+As you can see we need to specify the driver to an exchange supported by [btc-ex](https://github.com/theD1360/btc-ex). The `auth` 
+variable will be the connection values that are needed by our driver to connect to that exchanges API. 
+Our `wait` is the wait time in minutes between cycles for ticker data and executing trades (I recomend you keep it at 5). 
+Las but not least is the `dry` setting is for people who want to run the bot without actually making trades. This is good for developers testing changes.
 
 `$ php daemon.php`
 
 This will spawn the daemon install a service and start writing to a log file. After running this for the first time 
 you will now be able to stop and start the service as any other system daemon by using the following commands.
 
-`$ service mtgox start`
+`$ service tradebot start`
 to start
 and
-`$ service mtgox stop`
+`$ service tradebot stop`
 to stop
 
 WARNING: you may get a ton of PEAR warnings just disregard these. 
