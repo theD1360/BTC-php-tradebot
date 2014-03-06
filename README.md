@@ -1,35 +1,26 @@
-mtgox-php-tradebot
+BTC php tradebot
 ==================
 
-Tradebot daemon for MtGox Written in PHP
+MACD tradebot daemon for various BTC exchanges written in PHP
 
-Version 3.0
+Version 3.0.2
 ===========
-Another complete refactor of the code. This version now uses a different method for making trades. 
-Now instead of trying to manage each order, which was a hassle btw, I have opted to use a EMA/SMA convergence
-divergence methodology. This is not gauranteed to make profit on every trade but it attempts to predict the price
-change based on the EMA of the percent change for the last 25 trades. This appears to be working with limited success
-and would appreciate if some more experienced programmers would contribute to this project. :)
 
-What to expect from the new version.
+This program is written to trade using the MACD method as best as it can. Since I am not involved in any sort
+of financial mathmetician, this application was written to apply the methodolgy as best as I could understand it.
 
-* Cleaner code.
-* A more standard trading algorithm
-* Not much else :\
+Originally this bot was written for MtGox and was very rudimentary, but as MtGox began to crumble before our eyes, I took it upon myself
+to increase the quality of the code and switch exchanges. While doing so I made the descision to try and support as many
+exchanges as possible to save work in the event of another [goxxing](http://www.urbandictionary.com/define.php?term=goxxed).
 
-Sorry for changing the code so drastically every version. I don't have very much experience with writing trading 
-alogrithms.
-
+I have separated the exchange API interfaces and placed them another repo to be included in this project via composer. This package is 
+available to use for any projects that may require a standard interface for various exchanges. Both of these projects are still in 
+their infancy and contributions of all kinds are required to make, not only, them a success but bitcoin as a whole.
 
 Disclaimer
 ==========
 
 This software does not come with any gaurantees at all, use at your own risk.
-
-I have not made any money using this script due to the constant fine tuning done but it should work in theory.
-If you have any complaints or criticism about the bot please contribute them in a positive manner by actually 
-contributing to this project. If you would like to show your appreciation just send me a donation 
-(remember I've lost money during the fine tuning of this bot).
 
 
 Getting Started
@@ -37,7 +28,8 @@ Getting Started
 
 __Dependencies__
 * [Composer](https://getcomposer.org/) 
-* PHP5 CLI
+* php5 CLI
+* php5 cURL
 * ~~MtGox~~ [Bitstamp](https://www.bitstamp.net) Account [(working on kraken, and btc-e support)](https://github.com/theD1360/btc-ex)
 
 __Installing__
