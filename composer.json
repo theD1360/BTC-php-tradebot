@@ -9,8 +9,8 @@
     "require": {
         "php": ">=5.3.0",
         "thed1360/array-helper": "dev-master",
-        "thed1360/mtgox-api-v1-php-class": "dev-master",
-        "pear/system_daemon": "dev-master"
+        "pear/system_daemon": "dev-master",
+        "thed1360/btc-ex": "dev-master"
     },
     "autoload": {
         "psr-0": {

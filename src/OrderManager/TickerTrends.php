@@ -5,19 +5,25 @@
         Description: Classes used to manage the ticker trends and manage our orders.
 
 */
+
+use OrderManager\BitcoinCharts\BitcoinCharts;
 use Utilities\Arr;
 use DateTime;
 
 class TickerTrends extends Arr {
 
-    protected $mtgox,
+    protected $client,
               $max = 36,
-              $short = 16;
+              $short = 16,
+              $lastTransactionPrice,
+              $current,
+              $lastAction = "hold";
 
-    public function __construct($mtgox)
+    public function __construct($client)
     {
         //parent::__construct();
-        $this->mtgox = $mtgox;
+        $this->client = $client;
+        $this->lastTransactionPrice = new Arr();
 
     }
     
@@ -28,43 +34,43 @@ class TickerTrends extends Arr {
     public function updateTicker()
     {
 
+        $val = $this->client->ticker();
+        $this->insertTickerData(time(), $val->toArray());
+
+    }
+
+    private function insertTickerData($timestamp, $data = [])
+    {
+
         $date = new DateTime();
+        $date->setTimestamp((int) $timestamp);
         $date_formatted = $date->format("m-d-G");
 
         if(!$this->has($date_formatted)){
-            $sample_set = new SampleSet();
+            $sample_set = new SampleSet([]);
             $this->set($date_formatted, $sample_set);
         }    
-
+        
         $this->current = $this->get($date_formatted);
-
-        $val = $this->mtgox->getTicker();
         
-        $arr = ["value"=>"", "value_int"=>"", "display"=>"", "currency"=>""];
-    
-        $defs = [
-            "high" => $arr,
-            "low" => $arr,
-            "avg" => $arr,
-            "vwap" => $arr,
-            "vol" => $arr,
-            "last_all" => $arr,
-            "last_local" => $arr,
-            "last_orig" => $arr,
-            "last" => $arr,
-            "buy" => $arr,
-            "sell" => $arr,
-        ];
-    
-        $val = array_merge($defs, $val);
-        
-        $this->current->insert($val);
-        
-        $this->current->setPercentChange();
-        
+        $this->current->insertSample(new Arr($data));
+                
         $this->tickerPear();
     }
+
+    public function fillHistoric($symbol){
+
+        $trends = $this;
+        $bitcoinCharts = new BitcoinCharts();
+        $tradeData = $bitcoinCharts->trades(array('symbol' => $symbol));
+        $tradeData = new Arr(array_reverse($tradeData));
+        $new_data = $tradeData->each(function($item) use (&$trends){
+            $trends->insertTickerData($item->time, ["last"=>$item->price]);
+        });
+
+    }
     
+
     // removes any excess items;
     
     public function tickerPear()
@@ -128,22 +134,34 @@ class TickerTrends extends Arr {
     
     public function detectSwing()
     {
-        $price = $this->getHourlyAvg();
+        if($this->lastTransactionPrice->isEmpty()){
+            $this->lastTransactionPrice->insert($this->getSMA());
+        }
+
+        $change = $this->change();
         $EMA = $this->getEMA();
         $halfEMA = $this->getShortEMA();
         $SMA = $this->getSMA();
-        
-        // market trend is above zero we are currently climbing
-        if($price < $halfEMA && $halfEMA > $SMA && $halfEMA > $EMA)
-            return "sell";
-        elseif($price > $halfEMA && $halfEMA < $SMA && $halfEMA < $EMA)
-            return "buy";     
+        $last = $this->getTickerData()->last;
+
+        if($halfEMA < $EMA && $last > $this->transactionAvg() && ($this->lastAction == "hold" || $this->lastAction == "buy")){
+            $this->lastTransactionPrice->insert($last);
+            $this->lastAction = "sell";
+            return $this->lastAction;
+        }
+        elseif($halfEMA > $EMA && $last < $this->transactionAvg() && ($this->lastAction == "hold" || $this->lastAction == "sell")){
+            $this->lastTransactionPrice->insert($last);
+            $this->lastAction = "buy";
+            return $this->lastAction;
+        }
 
         return "hold";
         
     }
 
-    
+    public function transactionAvg(){
+        return $this->lastTransactionPrice->avg();
+    }
     
     // Gets the latest entry from the ticker 
     // It's best to retrive from here because it's 
@@ -151,8 +169,8 @@ class TickerTrends extends Arr {
     
     public function getTickerData()
     {
-        $last = clone $this->current;
-        return $last->last();
+        $last = $this->current->copy();
+        return $last->end();
     }
 
     public function getHourlyAvg()
@@ -160,12 +178,21 @@ class TickerTrends extends Arr {
         return $this->current->getSMA();
     }
 
+    public function change(){
+        $trend = 0;
+  
+        $this->each(function($item) use (&$trend){
+            $trend += $item->change(); 
+        });
+
+        return $trend/$this->length();    
+    }
+
 
     // returns a price change prediction based on EMA value
     public function predict($amount = null)
     {
-        $changes = new Arr($this->current->flatten("percentChange"));
-        $change = $changes->avg()/100;
+        $change = $this->percentChange();
     
         if(!$amount)
             throw new Exception("predict does not allow an empty value");

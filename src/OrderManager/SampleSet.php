@@ -10,47 +10,40 @@ use Utilities\Arr;
 class SampleSet extends Arr {
 
 	protected $max = 36,
-			  $short = 16;
+			  $short = 16,
+              $previous;
 
-    // Set the percent change for new ticker items.
-    public function setPercentChange()
-    {
-        $length = $this->length();
-        $multiplier = 2/($length+1);
-       
-        $previous = $this->last();
+    public function insertSample($data){
+        $set = $this->insert($data);
 
-        $this->each(function($current) use (&$previous, $multiplier){
-            
-            if(!isset($current->percentChange))
-                $current->percentChange = (self::percentChange($current->last->value, $previous->last->value) + $previous->percentChange) / 2; 
-          
-                $previous = $current;
-        });        
-    
+        $current = $set->end();
+
+        if(!isset($this->previous)){
+            $this->previous = $current;
+        }
+
+        $current->set("percentChange", self::calculateChange($current->last, $this->previous->last));
+
+        $this->previous = $current;
+
+        return $this;
     }
+
 
     public function getOpenPrice()
     {
-    	return $this->first()->last->value;
+    	return $this->first()->last;
     }
 
     public function getClosePrice()
     {
-    	return $this->last()->last->value;
+    	return $this->last()->last;
     }
 
     public function getAveragePrice()
     {
-    	$sum = 0;
-    	$length = $this->length();
-
-    	$this->each(function($item) use (&$sum){
-    		$sum += $item->last->value;
-    	});
-    
-    	return $sum/$length;
-
+        $last = new Arr($this->flatten("last"));
+        return $last->avg();   
     }
 
     public function getSMA()
@@ -73,7 +66,7 @@ class SampleSet extends Arr {
 		
         $subset->each(function($item) use (&$lastEMA, $multiplier){
 
-            	$lastEMA = ($item->last->value * $multiplier) + ($lastEMA * (1 - $multiplier) );
+            	$lastEMA = ($item->last * $multiplier) + ($lastEMA * (1 - $multiplier) );
 	    
         });
 
@@ -92,8 +85,13 @@ class SampleSet extends Arr {
         return $this->getEMA($slice);
     }
 
+    public function change(){
+        $changes = new Arr($this->flatten("percentChange"));
+        return $changes->avg();        
+    }
+
     
-    public static function percentChange($newest = 0, $oldest = 0)
+    public static function calculateChange($newest = 0, $oldest = 0)
     {
         $change = $newest-$oldest;
     

@@ -4,9 +4,8 @@
 require __DIR__ . '/vendor/autoload.php';
 
 use \System_Daemon; 
-use \OrderManager\OrderManager;
 use \OrderManager\TickerTrends;
-use \MtGox\MtGox;
+use \BitcoinExchange\Factory;
 use \Utilities\Arr;
 
 // get CLI arguments
@@ -26,9 +25,9 @@ $dry_notice = ($config->dry)?"DRY RUN!":"CAUTION::LIVE RUN!!!";
 
 
 // Bare minimum setup
-System_Daemon::setOption("appName", "mtgox");
+System_Daemon::setOption("appName", "tradebot");
 System_Daemon::setOption("authorEmail", "lego.admin@gmail.com");
-System_Daemon::setOption("appDescription", "mtgox trading bot");
+System_Daemon::setOption("appDescription", "Bitcoin market trading bot");
 System_Daemon::setOption("authorName", "diego alejos");
 
 # Write a init.d script
@@ -59,16 +58,21 @@ System_Daemon::log(
 
 try {
 	# create mtGox object
-	$mtgox = new MtGox( $config['mtgox']['key'],$config['mtgox']['secret'], $config['mtgox']['certFile']);
+	$instance  = new Factory( $config->driver, $config->auth->toArray());
+	$client = $instance->client();
+
 }catch( Exception $e){
 	echo "poop". $e->getMessage();
 	exit;
 }
 
-# Start instance of order manager
-$orders = new OrderManager($mtgox);
+
 # Start instance of ticker trends
-$trends = new TickerTrends($mtgox);
+$trends = new TickerTrends($client);
+
+$marketSymbol = preg_replace('/[^\da-z]/i', '', $config->driver)."USD";
+
+$trends->fillHistoric($marketSymbol);
 
 
 while(!System_Daemon::isDying()){
@@ -77,14 +81,13 @@ while(!System_Daemon::isDying()){
 	
 	    $trends->updateTicker();
 	    
-	    $orders->update();
 	    
-	    $balanceBTC = $orders->getAvailableBalance("BTC");
-	    $balanceUSD = $orders->getAvailableBalance("USD");
-	    $orderCount = $orders->length();
-	    $lastPrice = $trends->getTickerData()->last->value;
-	    $buyPrice = $trends->getTickerData()->buy->value;
-	    $sellPrice = $trends->getTickerData()->sell->value;
+	    $balanceBTC = $client->balance()->btc_available;
+	    $balanceUSD = $client->balance()->usd_available;
+	    $orderCount = $client->orders()->length();
+	    $lastPrice = $trends->getTickerData()->last;
+	    $buyPrice = $trends->getTickerData()->bid;
+	    $sellPrice = $trends->getTickerData()->ask;
 
 	    $suggestedAction = $trends->detectSwing();
 	    $SMA = $trends->getSMA();
@@ -96,7 +99,7 @@ while(!System_Daemon::isDying()){
 		// anounce ticker info		
 		System_Daemon::log(
 			System_Daemon::LOG_INFO, 
-			sprintf("EMA: %01.2f(16)/%01.2f(36), AVG: %01.2f, Hourly: %01.2f, LAST: %01.2f, BUY: %01.2f, SELL: %01.2f, ORDERS: %s, BALANCE: %01.2fUSD | %01.2fBTC, ACTION: %s, SETS: %s",
+			sprintf("EMA: %01.2f(16)/%01.2f(36), Avg: %01.2f(%01.2fhrly), Last: %01.2f, Buy: %01.2f, Sell: %01.2f, ORDERS: %s, Balance: %01.2fUSD | %01.2fBTC, Action: %s Transaction Avg: %01.2f",
 				$halfEMA,
 				$fullEMA,
 				$SMA,
@@ -108,7 +111,7 @@ while(!System_Daemon::isDying()){
 				$balanceUSD,
 				$balanceBTC,
 				$suggestedAction,
-				$trends->length()
+				$trends->transactionAvg()
 				)
 
 			
@@ -120,7 +123,7 @@ while(!System_Daemon::isDying()){
 	    if($suggestedAction == "buy" && (($balanceUSD/$buyPrice)/2) > 1.0E-2 ){
 	        
 	        if(!$config->dry)
-	        	$buy = $mtgox->placeOrder("bid", (($balanceUSD/$buyPrice)/2), $buyPrice);
+	        	$buy = $client->buy((($balanceUSD/$buyPrice)/2), $buyPrice);
 	        else
 	        	$buy = "[dry run]";
 
@@ -133,7 +136,7 @@ while(!System_Daemon::isDying()){
 	    if($suggestedAction == "sell" && $balanceBTC > 1.0E-2 ){
 	        
 	        if(!$config->dry)
-	        	$sell = $mtgox->placeOrder("ask", $balanceBTC, $sellPrice);	   
+	        	$sell = $client->sell($balanceBTC, $sellPrice);	   
 	       	else
 	       		$sell = "[dry run]";
 

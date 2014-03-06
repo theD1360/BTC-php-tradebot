@@ -1,0 +1,159 @@
+{
+    "_readme": [
+        "This file locks the dependencies of your project to a known state",
+        "Read more about it at http://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file"
+    ],
+    "hash": "b6c7272fca65d2209d4453e8f8ad9a1a",
+    "packages": [
+        {
+            "name": "pear/system_daemon",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/tomglue/system_daemon.git",
+                "reference": "ae868c79312093d5b5174bbe4d93bbf1e8a11466"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/tomglue/system_daemon/zipball/ae868c79312093d5b5174bbe4d93bbf1e8a11466",
+                "reference": "ae868c79312093d5b5174bbe4d93bbf1e8a11466",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=5.3.0"
+            },
+            "type": "library",
+            "autoload": {
+                "classmap": [
+                    "System/Daemon.php"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "description": "A port of the PEAR class to create Daemons with pure PHP",
+            "time": "2013-02-26 22:44:14"
+        },
+        {
+            "name": "thed1360/array-helper",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/theD1360/ArrayHelper.git",
+                "reference": "477c914fbb9a13cfdd23070b5153d33e1c0e5d8b"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/theD1360/ArrayHelper/zipball/477c914fbb9a13cfdd23070b5153d33e1c0e5d8b",
+                "reference": "477c914fbb9a13cfdd23070b5153d33e1c0e5d8b",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=5.3.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-0": {
+                    "Utilities": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "authors": [
+                {
+                    "name": "Diego Alejos",
+                    "email": "lego.admin@gmail.com"
+                }
+            ],
+            "description": "Simple array wrapping class",
+            "time": "2014-02-24 08:39:45"
+        },
+        {
+            "name": "thed1360/btc-ex",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/theD1360/btc-ex.git",
+                "reference": "b3ddb979bda54427cb0b3525e700982aeacaaab1"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/theD1360/btc-ex/zipball/b3ddb979bda54427cb0b3525e700982aeacaaab1",
+                "reference": "b3ddb979bda54427cb0b3525e700982aeacaaab1",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=5.4.0",
+                "thed1360/array-helper": "dev-master",
+                "thed1360/mtgox-api-v1-php-class": "dev-master"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-0": {
+                    "BitcoinExchange": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "authors": [
+                {
+                    "name": "Diego Alejos",
+                    "email": "lego.admin@gmail.com"
+                }
+            ],
+            "description": "Wrapping library for multiple BTC exchange protocols",
+            "time": "2014-03-05 06:25:39"
+        },
+        {
+            "name": "thed1360/mtgox-api-v1-php-class",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/theD1360/mtgox-api-v1-php-class.git",
+                "reference": "65610b3d93e2929673b6a08517aa55cedb310825"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/theD1360/mtgox-api-v1-php-class/zipball/65610b3d93e2929673b6a08517aa55cedb310825",
+                "reference": "65610b3d93e2929673b6a08517aa55cedb310825",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=5.3.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-0": {
+                    "MtGox": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Diego Alejos",
+                    "email": "lego.admin@gmail.com"
+                }
+            ],
+            "description": "Simplifies MtGox API authentication and interaction methods",
+            "time": "2014-02-12 07:09:50"
+        }
+    ],
+    "packages-dev": [
+
+    ],
+    "aliases": [
+
+    ],
+    "minimum-stability": "stable",
+    "stability-flags": {
+        "thed1360/array-helper": 20,
+        "thed1360/mtgox-api-v1-php-class": 20,
+        "pear/system_daemon": 20,
+        "thed1360/btc-ex": 20
+    },
+    "platform": {
+        "php": ">=5.3.0"
+    },
+    "platform-dev": [
+
+    ]
+}
