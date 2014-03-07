@@ -155,6 +155,12 @@ class TickerTrends extends Arr {
             return $this->lastAction;
         }
 
+        // cleanup to avoid memory leaks.
+
+        while($this->lastTransactionPrice->length() > 5){
+            $this->lastTransactionPrice->shift();
+        }
+
         return "hold";
         
     }
