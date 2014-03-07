@@ -138,18 +138,18 @@ class TickerTrends extends Arr {
             $this->lastTransactionPrice->insert($this->getSMA());
         }
 
-        $change = $this->change();
+        $change = $this->current->change();
         $EMA = $this->getEMA();
         $halfEMA = $this->getShortEMA();
         $SMA = $this->getSMA();
         $last = $this->getTickerData()->last;
 
-        if($halfEMA < $EMA && $last > $this->transactionAvg() && ($this->lastAction == "hold" || $this->lastAction == "buy")){
+        if($change < 0 && $halfEMA < $EMA && $last > $this->transactionAvg() && ($this->lastAction == "hold" || $this->lastAction == "buy")){
             $this->lastTransactionPrice->insert($last);
             $this->lastAction = "sell";
             return $this->lastAction;
         }
-        elseif($halfEMA > $EMA && $last < $this->transactionAvg() && ($this->lastAction == "hold" || $this->lastAction == "sell")){
+        elseif($change > 0 && $halfEMA > $EMA && $last < $this->transactionAvg() && ($this->lastAction == "hold" || $this->lastAction == "sell")){
             $this->lastTransactionPrice->insert($last);
             $this->lastAction = "buy";
             return $this->lastAction;
@@ -169,7 +169,7 @@ class TickerTrends extends Arr {
     
     public function getTickerData()
     {
-        $last = $this->current->copy();
+        $last = $this->current;
         return $last->end();
     }
 

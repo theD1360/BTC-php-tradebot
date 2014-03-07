@@ -95,15 +95,16 @@ while(!System_Daemon::isDying()){
 	    $halfEMA = $trends->getShortEMA();
 
 	    $hourlAvg = $trends->getHourlyAvg();
+	    $change  = ($trends->end()->change() > 0)? "up":"down";
 	    
 		// anounce ticker info		
 		System_Daemon::log(
 			System_Daemon::LOG_INFO, 
-			sprintf("EMA: %01.2f(16)/%01.2f(36), Avg: %01.2f(%01.2fhrly), Last: %01.2f, Buy: %01.2f, Sell: %01.2f, ORDERS: %s, Balance: %01.2fUSD | %01.2fBTC, Action: %s Transaction Avg: %01.2f",
+			sprintf("Change: %s, EMA: %01.2f(16)/%01.2f(36), Avg: %01.2f, Last: %01.2f, Buy: %01.2f, Sell: %01.2f, ORDERS: %s, Balance: %01.2fUSD | %01.2fBTC, Action: %s Transaction Avg: %01.2f",
+				$change,
 				$halfEMA,
 				$fullEMA,
 				$SMA,
-				$hourlAvg,
 				$lastPrice,
 				$buyPrice,
 				$sellPrice,
