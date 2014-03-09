@@ -93,9 +93,8 @@ class SampleSet extends Arr {
     
     public static function calculateChange($newest = 0, $oldest = 0)
     {
-        $change = $newest-$oldest;
     
-        return ($change/$oldest)*100;
+        return (($newest/$oldest)-1)*100;
             
     }
 }
